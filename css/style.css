@@ -1,0 +1,44 @@
+body {
+    /*background-image: url('../assets/Amsterdam.png');*/
+    background-repeat: no-repeat;
+    background-size: cover;
+    background-color: #10253f;
+    padding: 0;
+    margin: 0;
+
+    font-family: "Times New Roman", Times, serif;
+}
+
+header {
+    text-align: center;
+    color: white;
+}
+
+section {
+    background-color: rgba(16, 37, 63, 0.85);
+    padding: 10px;
+    margin: 20px;
+    min-width: 300px;
+    color: white;
+
+}
+
+h2 {
+    border-bottom:1px solid white;
+}
+
+.container,
+#customization-panel {
+    position: absolute;
+}
+
+/* Color boxes*/
+
+.box {
+    background-color: black;
+    border-style: solid;
+    border-color: white;
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+}

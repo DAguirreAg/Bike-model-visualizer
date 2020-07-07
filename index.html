@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<title>Live bike gallery</title>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+
+	<link rel="stylesheet" type="text/css" href="./css/style.css">
+
+	<!-- Load the stable version of handlebars.js -->
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/handlebars.js/4.0.11/handlebars.min.js"></script>
+
+</head>
+
+<body>
+	<header>
+		<h1>Live bike gallery</h1>
+	</header>
+	<div id="container">
+		<div id="customization-panel">
+			<section>
+				<h2>Model</h2>
+				<input type="radio" id="xs-model" name="model" value="xs" checked>
+				<label for="xs-model">XS</label><br>
+				<input type="radio" id="xx-model" name="model" value="xx">
+				<label for="xx-model">XX</label><br>
+				<input type="radio" id="xl-model" name="model" value="xl">
+				<label for="xl-model">XL</label><br>
+
+				<h2>Options</h2>
+
+				<h3>Color</h3>
+				<div id="color-options"></div>
+
+				<h3>Wheel type</h3>
+				<form name="wheel-type">
+					<input type="radio" id="wheel-regular" name="wheel" value="regular" checked>
+					<label for="wheel-regular">Regular</label><br>
+					<input type="radio" id="wheel-ultra" name="wheel" value="ultra">
+					<label for="wheel-ultra">Ultra</label><br>
+				</form>
+
+				<h3>Brake type</h3>
+				<form name="brake-type">
+					<input type="radio" id="brake-regular" name="brake" value="regular" checked>
+					<label for="brake-regular">Regular</label><br>
+					<input type="radio" id="brake-disk" name="brake" value="disk">
+					<label for="brake-disk">Disk</label><br>
+				</form>
+
+			</section>
+
+			<section>
+				<h2>Background</h2>
+				<select name="background" id="background" onchange="change_background(this.value);">
+					<option value="factory" selected>Factory</option>
+					<option value="amsterdam">Amsterdam</option>
+					<option value="paris">Paris</option>
+					<option value="shanghai">Shanghai</option>
+				</select>
+
+			</section>
+		</div>
+
+	</div>
+
+	<script type="module">
+
+		// Import Three.js
+		import * as THREE from './js/three.module.js';
+		import { OrbitControls } from './js/OrbitControls.js';
+		import { GLTFLoader } from './js/GLTFLoader.js';
+
+		// Main variables
+		const fov = 75;
+		var aspect = window.innerWidth / window.innerHeight;  // the canvas default
+		const near = 1;
+		const far = 100000;
+
+		var camera, controls, scene, renderer;
+		var pivot, group;
+		var frame_xs;
+		var wheel_front_regular, wheel_back_regular;
+		var wheel_front_ultra, wheel_back_ultra;
+		var brake_regular, brake_disk;
+		var warehouse;
+
+		var pos_x, pos_y, pos_z, rot_x, rot_y, rot_z;
+
+		init();
+		//render();// remove when using next line for animation loop (requestAnimationFrame)
+		animate();
+
+		function init() {
+
+			// Scene
+			scene = new THREE.Scene();
+			scene.background = new THREE.Color(0xcccccc);
+			scene.fog = new THREE.Fog(0xcccccc, 1000, 50000);
+
+			// Renderer
+			renderer = new THREE.WebGLRenderer({
+				preserveDrawingBuffer: true,
+				antialias: true
+			});
+
+			renderer.setPixelRatio(window.devicePixelRatio);
+			renderer.setSize(window.innerWidth, window.innerHeight);
+			
+			document.querySelector("#container").appendChild(renderer.domElement);
+
+			// Camera
+			camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
+			camera.position.set(-5000, 5000, -5000);
+
+			// Controls
+			controls = new OrbitControls(camera, renderer.domElement);
+
+			controls.enableDamping = true; // an animation loop is required when either damping or auto-rotation are enabled
+			controls.dampingFactor = 0.05;
+
+			controls.screenSpacePanning = false;
+
+			controls.minDistance = 1000;
+			controls.maxDistance = 3000;
+
+			//controls.minPolarAngle = Math.PI/3; // radians
+			controls.maxPolarAngle = Math.PI/2;
+
+			// Lights
+			var light = new THREE.DirectionalLight(0xffffff);
+			light.position.set(100, 100, -100);
+			scene.add(light);
+
+			var light = new THREE.DirectionalLight(0xffffff);
+			light.position.set(- 1000, 0, 0);
+			scene.add(light);
+
+			var light = new THREE.AmbientLight(0x222222);
+			scene.add(light);
+
+			// Arrows xyz
+			if (false) {
+				function createArrow(from, to, color) {
+					var direction = to.clone().sub(from);
+					var length = direction.length();
+					var arrowHelper = new THREE.ArrowHelper(direction.normalize(), from, length, color);
+					scene.add(arrowHelper);
+				}
+				var from = new THREE.Vector3(0, 0, 0);
+				var to_x = new THREE.Vector3(50, 0, 0);
+				var to_y = new THREE.Vector3(0, 50, 0);
+				var to_z = new THREE.Vector3(0, 0, 50);
+				var color_x = "red";
+				var color_y = "green";
+				var color_z = "blue";
+				createArrow(from, to_x, color_x);
+				createArrow(from, to_y, color_y);
+				createArrow(from, to_z, color_z);
+			}
+
+			// Add models
+
+			// Load models
+			group = new THREE.Group();
+
+			let loader = new GLTFLoader();
+
+			
+			// Warehouse
+			loader.load('./models/warehouse_building/scene.gltf', function (gltf) {
+				// Reposition model center
+				var box = new THREE.Box3().setFromObject(gltf.scene);
+				box.getCenter(gltf.scene.position); // this re-sets the mesh position
+				gltf.scene.position.multiplyScalar(- 1);
+
+				// Create pivot point
+				pivot = new THREE.Group();
+				pivot.add(gltf.scene);
+
+				pivot.scale.set(1000,1000,1000);
+
+				pivot.position.y = 2400;
+				warehouse = pivot;
+
+				group.add(pivot);
+			});
+
+			// Bike Frame
+			loader.load('./models/frames/frame_xs.glb', function (gltf) {
+				// Reposition model center
+				var box = new THREE.Box3().setFromObject(gltf.scene);
+				box.getCenter(gltf.scene.position); // this re-sets the mesh position
+				gltf.scene.position.multiplyScalar(- 1);
+
+				// Create pivot point
+				pivot = new THREE.Group();
+				pivot.add(gltf.scene);
+
+				pivot.rotation.x = -Math.PI / 2;
+
+				frame_xs = pivot;
+
+				group.add(pivot);
+			});
+
+			// Bike Front Wheel regular
+			loader.load('./models/wheels/wheel_regular.glb', function (gltf) {
+				// Reposition model center
+				var box = new THREE.Box3().setFromObject(gltf.scene);
+				box.getCenter(gltf.scene.position); // this re-sets the mesh position
+				gltf.scene.position.multiplyScalar(- 1);
+
+				// Create pivot point
+				pivot = new THREE.Group();
+				pivot.add(gltf.scene);
+
+				pivot.position.y = -280;
+				pivot.position.z = -520;				
+
+				wheel_front_regular = pivot;
+
+				group.add(pivot);
+			});
+
+			// Bike Back Wheel regular
+			loader.load('./models/wheels/wheel_regular.glb', function (gltf) {
+				// Reposition model center
+				var box = new THREE.Box3().setFromObject(gltf.scene);
+				box.getCenter(gltf.scene.position); // this re-sets the mesh position
+				gltf.scene.position.multiplyScalar(- 1);
+
+				// Create pivot point
+				pivot = new THREE.Group();
+				pivot.add(gltf.scene);
+
+				pivot.position.y = -280;
+				pivot.position.z = 520;				
+
+				wheel_back_regular = pivot;
+
+				group.add(pivot);
+			});
+
+			
+			// Bike Front Wheel ultra
+			loader.load('./models/wheels/wheel_ultra.glb', function (gltf) {
+				// Reposition model center
+				var box = new THREE.Box3().setFromObject(gltf.scene);
+				box.getCenter(gltf.scene.position); // this re-sets the mesh position
+				gltf.scene.position.multiplyScalar(- 1);
+
+				// Create pivot point
+				pivot = new THREE.Group();
+				pivot.add(gltf.scene);
+
+				pivot.position.y = -280;
+				pivot.position.z = -520;				
+
+				wheel_front_ultra = pivot;
+				wheel_front_ultra.visible = false;
+
+				group.add(pivot);
+			});
+
+			// Bike Back Wheel ultra
+			loader.load('./models/wheels/wheel_ultra.glb', function (gltf) {
+				// Reposition model center
+				var box = new THREE.Box3().setFromObject(gltf.scene);
+				box.getCenter(gltf.scene.position); // this re-sets the mesh position
+				gltf.scene.position.multiplyScalar(- 1);
+
+				// Create pivot point
+				pivot = new THREE.Group();
+				pivot.add(gltf.scene);
+
+				pivot.position.y = -280;
+				pivot.position.z = 520;				
+
+				wheel_back_ultra = pivot;
+				wheel_back_ultra.visible = false;
+
+				group.add(pivot);
+			});
+
+			// Bike Front brake disk
+				loader.load('./models/brakes/brake_disk.glb', function (gltf) {
+				// Reposition model center
+				var box = new THREE.Box3().setFromObject(gltf.scene);
+				box.getCenter(gltf.scene.position); // this re-sets the mesh position
+				gltf.scene.position.multiplyScalar(- 1);
+
+				// Create pivot point
+				pivot = new THREE.Group();
+				pivot.add(gltf.scene);
+
+				pivot.position.y = -280;
+				pivot.position.z = -520;				
+
+				brake_disk = pivot;
+				brake_disk.visible = false;
+
+				group.add(pivot);
+			});
+
+			// Include group to scene
+			scene.add(group);
+
+			// Setup EventListeners
+			/// Window resized
+			window.addEventListener('resize', onWindowResize, false);
+
+			/// Wheel change
+			var radios = document.forms["wheel-type"].elements["wheel"];
+			for(var i = 0, max = radios.length; i < max; i++) {
+				radios[i].onclick = function() {
+					change_wheel_type(this.value);
+				}
+			}
+
+			/// Brake change
+			var radios = document.forms["brake-type"].elements["brake"];
+			for(var i = 0, max = radios.length; i < max; i++) {
+				radios[i].onclick = function() {
+					change_brake_type(this.value);
+				}
+			}
+
+		}
+
+
+		function onWindowResize() {
+
+			aspect = window.innerWidth / window.innerHeight
+			camera.aspect = aspect;
+			camera.updateProjectionMatrix();
+
+			renderer.setSize(window.innerWidth, window.innerHeight);
+
+		}
+
+		function animate() {
+
+			requestAnimationFrame(animate);
+
+			controls.update(); // only required if controls.enableDamping = true, or if controls.autoRotate = true
+
+			render();
+		}
+
+		function render() {
+			renderer.render(scene, camera);
+		}
+
+		// Change wheel when selected
+		function change_wheel_type(wheelType) {
+			
+			if (wheelType == "regular") {
+				wheel_front_regular.visible = true;
+				wheel_back_regular.visible = true;
+				wheel_front_ultra.visible = false;
+				wheel_back_ultra.visible = false;
+			} else {
+				wheel_front_regular.visible = false;
+				wheel_back_regular.visible = false;
+				wheel_front_ultra.visible = true;
+				wheel_back_ultra.visible = true;
+			}	
+
+		};
+
+		// Change background when selected
+		function change_brake_type(brakeType) {
+			
+			if (brakeType == "disk") {
+				brake_disk.visible = true;
+			} else {
+				brake_disk.visible = false;
+			}		
+	
+		};
+				
+
+	</script>
+
+</body>
+
+<!-- Templates -->
+<script id="colors-template" type="text/template">
+	<div class="box" id="{{color}}" onclick="change_color(this.id)" style="background-color: {{color}};"></div>
+</script>
+
+
+<script>
+	// Load templates
+	const template_colors = Handlebars.compile(document.querySelector('#colors-template').innerHTML);
+
+	// General variables
+	colors = ["red", "yellow", "green", "blue", "black", "white"];
+	const background_urls = {
+		"factory": "url('../assets/background/factory.jpg')",
+		"amsterdam": "url('../assets/background/Amsterdam.png')",
+		"paris": "",
+		"shanghai": ""
+	};
+
+	// Generate the color options
+	colors.forEach(color => {
+		document.querySelector("#color-options").innerHTML += template_colors({
+			"color": color
+		});
+	});
+
+	// Change color when selected
+	function change_color(color) {
+		console.log(color);
+		// To DO
+	};
+
+	// Change background when selected
+	function change_background(background) {
+		url = background_urls[background];
+
+		console.log(background);
+		//document.body.style.backgroundImage = url;
+		// To DO
+	};
+
+
+	// Initiliaze
+	/// Setup background
+	// change_background("factory");
+</script>
+
+
+</html>
